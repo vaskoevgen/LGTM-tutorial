@@ -1,0 +1,53 @@
+# Loki — single-binary mode for local development
+# Stores logs on local filesystem using in-memory ring coordination.
+# Docs: https://grafana.com/docs/loki/latest/configure/
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+# Single-binary common config — sets storage root and ring backend
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /data/loki
+  storage:
+    filesystem:
+      chunks_directory: /data/loki/chunks
+      rules_directory: /data/loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+# Schema v13 with TSDB index (recommended for new deployments)
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # Required for OTLP log ingestion
+  allow_structured_metadata: true
+  # Relaxed limits for local dev
+  ingestion_rate_mb: 64
+  ingestion_burst_size_mb: 128
+
+# Enable OTLP receiver so the demo app can push logs via standard OTLP HTTP
+# Endpoint: POST http://loki:3100/otlp/v1/logs
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+ruler:
+  alertmanager_url: http://localhost:9093

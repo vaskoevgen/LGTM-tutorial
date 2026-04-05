@@ -1,0 +1,164 @@
+name: lgtm-tutorial
+
+# Shared network so all containers resolve each other by service name
+networks:
+  lgtm:
+    driver: bridge
+
+# Named volumes for persistent data across restarts
+volumes:
+  mimir-data:
+  loki-data:
+  tempo-data:
+  grafana-data:
+
+services:
+
+  # ── Mimir ───────────────────────────────────────────────────────────────────
+  # Prometheus-compatible long-term metrics store.
+  # Receives metrics via:
+  #   - OTLP gRPC     → port 9095  (from demo-app)
+  #   - remote_write  → port 9009  (from Tempo span metrics generator)
+  # Query via Prometheus HTTP API: http://localhost:9009/prometheus
+  #
+  # Note: grafana/mimir is a distroless image (no shell/wget/curl).
+  # We use a startup script container to signal readiness, relying on
+  # restart: on-failure to handle ordering instead.
+  mimir:
+    image: grafana/mimir:2.13.0
+    container_name: mimir
+    command:
+      - -config.file=/etc/mimir/mimir.yaml
+      - -target=all
+    volumes:
+      - ./config/mimir:/etc/mimir:ro
+      - mimir-data:/data/mimir
+    ports:
+      - "9009:9009"   # HTTP (Prometheus API + remote_write + OTLP HTTP)
+      - "9095:9095"   # gRPC (OTLP metrics from demo-app)
+    networks:
+      - lgtm
+    restart: on-failure
+
+  # ── Loki ────────────────────────────────────────────────────────────────────
+  # Log aggregation store.
+  # Receives logs via:
+  #   - OTLP HTTP     → POST http://localhost:3100/otlp/v1/logs  (from demo-app)
+  #   - Loki push API → POST http://localhost:3100/loki/api/v1/push
+  loki:
+    image: grafana/loki:3.2.0
+    container_name: loki
+    user: "0"  # run as root to avoid volume permission issues in local dev
+    command:
+      - -config.file=/etc/loki/loki.yaml
+      - -target=all
+    volumes:
+      - ./config/loki:/etc/loki:ro
+      - loki-data:/data/loki
+    ports:
+      - "3100:3100"   # HTTP (push API + OTLP logs + query API)
+      - "9096:9096"   # gRPC
+    networks:
+      - lgtm
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ── Tempo ───────────────────────────────────────────────────────────────────
+  # Distributed tracing backend.
+  # Receives traces via OTLP (gRPC 4317 / HTTP 4318).
+  # Generates span metrics and pushes them to Mimir via remote_write.
+  # grafana/tempo is also distroless — no healthcheck tool available.
+  tempo:
+    image: grafana/tempo:2.6.0
+    container_name: tempo
+    user: "0"  # run as root to avoid volume permission issues in local dev
+    command:
+      - -config.file=/etc/tempo/tempo.yaml
+      - -target=all
+    volumes:
+      - ./config/tempo:/etc/tempo:ro
+      - tempo-data:/data/tempo
+    ports:
+      - "3200:3200"   # HTTP (Tempo query API)
+      - "4317:4317"   # OTLP gRPC (receive traces from demo-app)
+      - "4318:4318"   # OTLP HTTP (alternative trace ingestion)
+    networks:
+      - lgtm
+    depends_on:
+      - mimir
+    restart: on-failure
+
+  # ── Grafana ─────────────────────────────────────────────────────────────────
+  # Visualization layer — pre-provisioned with all three datasources
+  # and an overview dashboard. Open http://localhost:3000.
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor metricsSummary
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - lgtm
+    depends_on:
+      - mimir
+      - loki
+      - tempo
+    restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ── Demo App ────────────────────────────────────────────────────────────────
+  # Python FastAPI app that sends all three signal types:
+  #   Traces  → Tempo  (OTLP gRPC 4317)
+  #   Metrics → Mimir  (OTLP gRPC 9095)
+  #   Logs    → Loki   (OTLP HTTP /otlp/v1/logs)
+  # Includes a background traffic generator so dashboards are always live.
+  demo-app:
+    build:
+      context: ./demo-app
+      dockerfile: Dockerfile
+    container_name: demo-app
+    environment:
+      - TEMPO_ENDPOINT=http://tempo:4317
+      - MIMIR_ENDPOINT=http://mimir:9009
+      - LOKI_ENDPOINT=http://loki:3100
+    ports:
+      - "8080:8080"
+    networks:
+      - lgtm
+    depends_on:
+      loki:
+        condition: service_healthy
+      mimir:
+        condition: service_started
+      tempo:
+        condition: service_started
+    restart: on-failure
+    develop:
+      # Tilt live-update: sync source changes without a full rebuild
+      watch:
+        - action: sync
+          path: ./demo-app
+          target: /app
+          ignore:
+            - __pycache__
+            - "*.pyc"
+        - action: rebuild
+          path: ./demo-app/requirements.txt

@@ -1,0 +1,65 @@
+# Grafana datasource provisioning
+# All four backends are pre-wired with trace-to-log and exemplar correlations.
+# Docs: https://grafana.com/docs/grafana/latest/administration/provisioning/
+
+apiVersion: 1
+
+datasources:
+  # ── Mimir ────────────────────────────────────────────────────────────────────
+  - name: Mimir
+    uid: mimir
+    type: prometheus
+    url: http://mimir:9009/prometheus
+    isDefault: true
+    jsonData:
+      timeInterval: 15s
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: tempo
+
+  # ── Loki ─────────────────────────────────────────────────────────────────────
+  - name: Loki
+    uid: loki
+    type: loki
+    url: http://loki:3100
+    jsonData:
+      # Jump from a log line to the trace that produced it
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"trace_id":"(\w+)"'
+          url: '$${__value.raw}'
+          datasourceUid: tempo
+          urlDisplayLabel: View Trace
+
+  # ── Tempo ────────────────────────────────────────────────────────────────────
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    url: http://tempo:3200
+    jsonData:
+      # Jump from a trace span to the correlated logs
+      tracesToLogsV2:
+        datasourceUid: loki
+        filterByTraceID: true
+        filterBySpanID: false
+        customQuery: true
+        query: '{service_name="${__span.tags["service.name"]}"} | json | trace_id="${__trace.traceId}"'
+      # Jump from a trace span to the correlated metrics
+      tracesToMetrics:
+        datasourceUid: mimir
+        tags:
+          - key: service.name
+            value: service_name
+        queries:
+          - name: Request rate
+            query: 'sum(rate(traces_spanmetrics_calls_total{$$__tags}[5m]))'
+      # Enable service map (powered by Tempo span metrics → Mimir)
+      serviceMap:
+        datasourceUid: mimir
+      # Enable search via TraceQL
+      search:
+        hide: false
+      lokiSearch:
+        datasourceUid: loki
+      nodeGraph:
+        enabled: true

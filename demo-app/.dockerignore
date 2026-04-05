@@ -1,0 +1,11 @@
+# Don't copy these into the demo-app Docker image
+
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+
+.DS_Store
+*.md

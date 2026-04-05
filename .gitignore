@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+
+# macOS
+.DS_Store
+
+# Tilt
+.tilt_persist/
+
+# Docker volumes (if ever bind-mounted locally)
+data/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
