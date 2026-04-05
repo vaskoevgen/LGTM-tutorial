@@ -91,7 +91,7 @@ Logs are received via the **OTLP HTTP** endpoint (`POST /otlp/v1/logs`), support
 
 ### Grafana — visualization
 
-Pre-provisioned with all datasources and a ready-to-use dashboard. Anonymous access with Admin role is enabled — no login required.
+Pre-provisioned with all datasources and a ready-to-use dashboard. Login is required. Default credentials: `admin` / `admin` (Grafana will prompt you to change the password on first login).
 
 **Datasources provisioned:** `config/grafana/provisioning/datasources/datasources.yaml`
 
