@@ -34,7 +34,7 @@ Tilt opens a browser at `http://localhost:10350` showing all services. Once ever
 | Grafana | http://localhost:3000 | Dashboards & Explore — **start here** |
 | Tilt UI | http://localhost:10350 | Service status & logs |
 | Demo App | http://localhost:8080/docs | Swagger UI |
-| Mimir | http://localhost:9009/prometheus | Prometheus-compat query API |
+| Mimir | http://localhost:9009 | Admin UI + Prometheus-compat query API |
 | Loki | http://localhost:3100 | Log query API |
 | Tempo | http://localhost:3200 | Trace query API |
 
@@ -73,7 +73,7 @@ Pre-provisioned with all datasources and a ready-to-use dashboard.
 
 ### Mimir — metrics
 
-**URL:** http://localhost:9009/prometheus
+**URL:** http://localhost:9009 (Admin UI) — the Prometheus query API is at `/prometheus` but returns JSON, not a page
 **Grafana datasource:** Explore → select **Mimir**
 
 [Grafana Mimir](https://grafana.com/docs/mimir/latest/) is a long-term metrics store that is fully compatible with Prometheus. You query it using PromQL, the same query language as Prometheus. The key difference from plain Prometheus is that Mimir is designed to scale horizontally and retain metrics for months or years, whereas Prometheus is typically short-lived.
