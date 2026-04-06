@@ -35,8 +35,8 @@ Tilt opens a browser at `http://localhost:10350` showing all services. Once ever
 | Tilt UI | http://localhost:10350 | Service status & logs |
 | Demo App | http://localhost:8080/docs | Swagger UI |
 | Mimir | http://localhost:9009 | Admin UI + Prometheus-compat query API |
-| Loki | http://localhost:3100 | Log query API |
-| Tempo | http://localhost:3200 | Trace query API |
+| Loki | http://localhost:3100/ready | Health check |
+| Tempo | http://localhost:3200/ready | Health check |
 
 Open the **LGTM Tutorial — Overview** dashboard in Grafana. It starts populating within ~30 seconds because the demo app has a built-in traffic generator — no manual steps needed.
 
@@ -95,7 +95,7 @@ In this stack Mimir runs in **single-binary mode** — one process handles inges
 
 ### Loki — logs
 
-**URL:** http://localhost:3100
+**URL:** http://localhost:3100/ready (health check) — Loki has no browser UI, use Grafana to query logs
 **Grafana datasource:** Explore → select **Loki**
 
 [Grafana Loki](https://grafana.com/docs/loki/latest/) is a log aggregation system. Unlike traditional log tools (e.g. Elasticsearch) it does **not** full-text index log content — it only indexes the labels attached to a log stream (e.g. `service_name`, `severity_text`). This makes it cheap to run and fast to ingest. You query it using LogQL.
@@ -113,7 +113,7 @@ In this stack Loki receives logs from the demo-app via the **OTLP HTTP** endpoin
 
 ### Tempo — traces
 
-**URL:** http://localhost:3200
+**URL:** http://localhost:3200/ready (health check) — Tempo has no browser UI, use Grafana to query traces
 **Grafana datasource:** Explore → select **Tempo**
 
 [Grafana Tempo](https://grafana.com/docs/tempo/latest/) is a distributed tracing backend. A **trace** represents a single request flowing through your system, broken into **spans** — one span per operation (HTTP handler, DB query, external call). Tempo stores these traces and lets you search them by service, duration, status, or any span attribute using TraceQL.
